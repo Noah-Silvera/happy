@@ -870,6 +870,18 @@ describe('runClaude remote JSONL scanner', () => {
         await harness.finish();
     });
 
+    it('advertises queueing when resuming a session whose stored metadata predates it', async () => {
+        process.env.HAPPY_RECONNECT_SESSION_ID = 'happy-session-1';
+        process.env.HAPPY_RECONNECT_ENCRYPTION_KEY = Buffer.alloc(32).toString('base64');
+        process.env.HAPPY_RECONNECT_ENCRYPTION_VARIANT = 'legacy';
+        const harness = await startRemoteRunClaudeHarness({
+            metadata: { claudeSessionId: 'claude-session-1', lifecycleState: 'archived' },
+        });
+        expect(harness.api.getOrCreateSession).not.toHaveBeenCalled();
+        expect(harness.sessionClient.getMetadata()).toMatchObject({ queueing: true, lifecycleState: 'running' });
+        await harness.finish();
+    });
+
     it('injects a steer message into the live run instead of the queue while thinking', async () => {
         const harness = await startRemoteRunClaudeHarness();
         const handler = harness.sessionClient.onUserMessage.mock.calls[0][0];
