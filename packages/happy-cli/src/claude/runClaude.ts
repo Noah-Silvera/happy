@@ -292,6 +292,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             ...meta,
             lifecycleState: 'running',
             archivedBy: undefined,
+            queueing: true,
         }));
     }
 
