@@ -294,8 +294,12 @@ export const MessageContentSchema = z.union([UserMessageSchema, AgentMessageSche
 export type MessageContent = z.infer<typeof MessageContentSchema>
 
 export type Metadata = {
-  /** Session-level features the phone may rely on. */
-  capabilities?: { queueing?: boolean },
+  /**
+   * Honors meta.delivery from the phone (queue/steer). Deliberately not under
+   * `capabilities`: the app's strict Rig capabilities schema would reject a
+   * partial object and fail parsing of the whole metadata.
+   */
+  queueing?: boolean,
   /**
    * ACP session config option value (normalized for UI metadata consumers).
    */

@@ -864,9 +864,9 @@ describe('runClaude remote JSONL scanner', () => {
         await harness.finish();
     });
 
-    it('advertises capabilities.queueing in the session metadata', async () => {
+    it('advertises queueing in the session metadata', async () => {
         const harness = await startRemoteRunClaudeHarness();
-        expect((harness.api.getOrCreateSession.mock.calls as any)[0][0].metadata.capabilities).toEqual({ queueing: true });
+        expect((harness.api.getOrCreateSession.mock.calls as any)[0][0].metadata.queueing).toBe(true);
         await harness.finish();
     });
 
