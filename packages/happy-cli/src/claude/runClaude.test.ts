@@ -863,4 +863,51 @@ describe('runClaude remote JSONL scanner', () => {
         expect(harness.loopOptions.messageQueue.queue).toEqual([]);
         await harness.finish();
     });
+
+    it('advertises capabilities.queueing in the session metadata', async () => {
+        const harness = await startRemoteRunClaudeHarness();
+        expect(harness.api.getOrCreateSession.mock.calls[0][0].metadata.capabilities).toEqual({ queueing: true });
+        await harness.finish();
+    });
+
+    it('injects a steer message into the live run instead of the queue while thinking', async () => {
+        const harness = await startRemoteRunClaudeHarness();
+        const handler = harness.sessionClient.onUserMessage.mock.calls[0][0];
+        const steer = vi.fn(() => true);
+        Object.assign(harness.runtimeSession, { thinking: true, steer });
+
+        await handler({ content: { text: 'change course' }, meta: { delivery: 'steer' } });
+
+        expect(steer).toHaveBeenCalledWith('change course', []);
+        expect(harness.loopOptions.messageQueue.queue).toEqual([]);
+        await harness.finish();
+    });
+
+    it.each([
+        ['queue', true],
+        [undefined, true],
+        ['steer', false],
+    ])('queues delivery=%s when thinking=%s with no steer path to use', async (delivery, thinking) => {
+        const harness = await startRemoteRunClaudeHarness();
+        const handler = harness.sessionClient.onUserMessage.mock.calls[0][0];
+        const steer = vi.fn(() => true);
+        Object.assign(harness.runtimeSession, { thinking, steer });
+
+        await handler({ content: { text: 'later' }, meta: delivery ? { delivery } : {} });
+
+        expect(steer).not.toHaveBeenCalled();
+        expect(harness.loopOptions.messageQueue.queue).toHaveLength(1);
+        await harness.finish();
+    });
+
+    it('falls back to the queue when the live run declines the steer', async () => {
+        const harness = await startRemoteRunClaudeHarness();
+        const handler = harness.sessionClient.onUserMessage.mock.calls[0][0];
+        Object.assign(harness.runtimeSession, { thinking: true, steer: vi.fn(() => false) });
+
+        await handler({ content: { text: 'no stream' }, meta: { delivery: 'steer' } });
+
+        expect(harness.loopOptions.messageQueue.queue).toHaveLength(1);
+        await harness.finish();
+    });
 });
