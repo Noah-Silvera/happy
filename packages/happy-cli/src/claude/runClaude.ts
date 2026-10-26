@@ -146,6 +146,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         lifecycleState: 'running',
         lifecycleStateSince: Date.now(),
         flavor: 'claude',
+        capabilities: { queueing: true },
         sandbox: sandboxConfig?.enabled ? sandboxConfig : null,
         dangerouslySkipPermissions,
         ...(forkedFromSessionId ? { parentSessionId: forkedFromSessionId } : {}),
@@ -828,6 +829,15 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
                 } as any);
                 return;
             }
+        }
+
+        // A phone "steer" while a run is live goes straight into the SDK input
+        // stream; if no stream is open it falls through to the queue. Queue or
+        // unset delivery keeps the pre-existing wait-for-the-turn behavior.
+        if (message.meta?.delivery === 'steer' && currentSession?.thinking
+            && currentSession.steer(message.content.text, attachmentsForThisMessage)) {
+            logger.debug('[loop] Steered user message into the live run');
+            return;
         }
 
         // Push with resolved permission mode, model, system prompts, and tools

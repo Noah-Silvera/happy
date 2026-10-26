@@ -43,6 +43,8 @@ export async function claudeRemote(opts: {
     // Callbacks
     onSessionFound: (id: string) => void,
     onThinkingChange?: (thinking: boolean) => void,
+    /** Hands the caller a way to push a user message into the live run; called with null when the run ends. */
+    onSteerSink?: (sink: ((content: MessageParam['content']) => void) | null) => void,
     onMessage: (message: SDKMessage) => void,
     onCompletionEvent?: (message: string) => void,
     onSessionReset?: () => void,
@@ -168,6 +170,10 @@ export async function claudeRemote(opts: {
             role: 'user',
             content: initial.message,
         },
+    });
+
+    opts.onSteerSink?.((content) => {
+        messages.push({ type: 'user', parent_tool_use_id: null, message: { role: 'user', content } });
     });
 
     // Start the loop
@@ -395,6 +401,7 @@ export async function claudeRemote(opts: {
             throw e;
         }
     } finally {
+        opts.onSteerSink?.(null);
         updateThinking(false);
     }
 }
