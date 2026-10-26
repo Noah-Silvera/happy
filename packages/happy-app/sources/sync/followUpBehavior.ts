@@ -46,5 +46,7 @@ export function resolveFollowUpDelivery(behavior: unknown, gesture: keyof Follow
 
 /** Strict like rigSendsMessageReceipts: a delivery the daemon ignores would mislabel the message. */
 export function rigSupportsFollowUpQueueing(metadata: Metadata | null | undefined): boolean {
+    // Owner patch: happy-cli sessions are not Rig, so they advertise a top-level flag.
+    if (metadata?.queueing === true) return true;
     return isRigMetadataV1(metadata) && metadata?.capabilities?.[FOLLOW_UP_QUEUEING_CAPABILITY] === true;
 }

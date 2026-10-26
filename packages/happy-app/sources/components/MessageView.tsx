@@ -118,7 +118,11 @@ function UserMessageFrame(props: {
         : props.delivery === 'queue' ? t('message.queued')
           : props.delivery === 'steer' ? t('message.steering')
             : t('message.sendsAfterThisTurn'))
-      : '';
+      // happy-cli never sends receipts, so such a send is never held pending;
+      // keep naming how it was delivered instead of showing nothing.
+      : props.delivery !== undefined && props.queuedWhileBusy === undefined
+        ? (props.delivery === 'queue' ? t('message.queued') : t('message.steering'))
+        : '';
   return (
     <View style={[styles.userMessageContainer, fromOther && styles.userMessageContainerOther]}>
       {fromOther ? <Text numberOfLines={1} style={styles.userMessageAuthorText}>{props.author!.name}</Text> : null}

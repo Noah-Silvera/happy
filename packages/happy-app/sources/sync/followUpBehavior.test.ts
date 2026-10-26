@@ -7,6 +7,7 @@ import {
     rigSupportsFollowUpQueueing,
 } from './followUpBehavior';
 import { settingsDefaults } from './settings';
+import { MetadataSchema } from './storageTypes';
 import { rigMetadataFixture } from './__testdata__/rigMetadata';
 
 describe('followUpBehavior', () => {
@@ -44,6 +45,19 @@ describe('rigSupportsFollowUpQueueing', () => {
         expect(rigSupportsFollowUpQueueing(withCapability('true'))).toBe(false);
         // Today's daemons advertise steering but not queueing.
         expect(rigSupportsFollowUpQueueing(rigMetadataFixture)).toBe(false);
+    });
+
+    it('is on for a happy-cli session that advertises the top-level queueing flag', () => {
+        const cli = { path: '/repo', host: 'mac', flavor: 'claude' } as any;
+        expect(rigSupportsFollowUpQueueing({ ...cli, queueing: true })).toBe(true);
+        expect(rigSupportsFollowUpQueueing({ ...cli, queueing: false })).toBe(false);
+        expect(rigSupportsFollowUpQueueing(cli)).toBe(false);
+    });
+
+    it('keeps the queueing flag when parsing session metadata', () => {
+        const parsed = MetadataSchema.parse({ path: '/repo', host: 'mac', queueing: true });
+        expect(parsed.queueing).toBe(true);
+        expect(MetadataSchema.parse({ path: '/repo', host: 'mac', queueing: 'yes' }).queueing).toBeUndefined();
     });
 
     it('is off for legacy happy-cli sessions and missing metadata', () => {

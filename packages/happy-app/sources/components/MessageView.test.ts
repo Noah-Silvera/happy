@@ -61,6 +61,19 @@ afterEach(() => {
 });
 
 describe('user message frame', () => {
+    it.each([
+        ['steer', 'message.steering'],
+        ['queue', 'message.queued'],
+    ] as const)('keeps naming a %s send that no receipt will ever settle (happy-cli)', (delivery, label) => {
+        const renderer = render({ ...base, meta: { delivery } });
+        expect(labels(renderer)).toContain(label);
+    });
+
+    it('stays quiet for a settled delivery that was already tracked by receipts', () => {
+        const renderer = render({ ...base, meta: { queuedWhileBusy: true, delivery: 'queue' } });
+        expect(labels(renderer)).toEqual(['']);
+    });
+
     it.each([undefined, false])('does not flash status or dim an idle/new-chat send (%s)', (queuedWhileBusy) => {
         const message = { ...base, pending: true, meta: { queuedWhileBusy } };
         const renderer = render(message);
