@@ -53,17 +53,33 @@
           document.documentElement.scrollTop = 0;
           document.body.scrollTop = 0;
         }
+        // The document is pinned, so iOS no longer scrolls a focused composer above the keyboard (which overlays the
+        // layout viewport). While the keyboard is up, slide the whole app up by its height, and back down on close.
+        function fit() {
+          var vv = window.visualViewport;
+          var root = document.getElementById('root');
+          if (!vv || !root) return;
+          var kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          if (kb < 100) kb = 0;
+          root.style.transition = 'transform 0.25s ease-out';
+          root.style.transform = kb ? 'translateY(' + -kb + 'px)' : '';
+        }
         function later() {
           reset();
-          setTimeout(reset, 100);
-          setTimeout(reset, 350);
+          fit();
+          setTimeout(function () { reset(); fit(); }, 100);
+          setTimeout(function () { reset(); fit(); }, 350);
         }
         window.addEventListener('focusout', later);
+        window.addEventListener('focusin', later);
         window.addEventListener('scroll', function () {
           var a = document.activeElement;
           if (!a || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) reset();
         });
-        if (window.visualViewport) window.visualViewport.addEventListener('resize', later);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', later);
+          window.visualViewport.addEventListener('scroll', fit);
+        }
       })();
     </script>
   </body>
