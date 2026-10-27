@@ -950,4 +950,36 @@ describe('runClaude remote JSONL scanner', () => {
         await harness.finish();
         expect(existsSync(portFile)).toBe(false);
     });
+
+    describe('HAPPY_INJECT_TOKEN and /inject', () => {
+        afterEach(() => { delete process.env.HAPPY_INJECT_TOKEN; });
+
+        const injectOptions = () => mockStartHookServer.mock.calls.at(-1)?.[0];
+
+        it('hands the token to the hook server and scrubs it from process.env before claude spawns', async () => {
+            process.env.HAPPY_INJECT_TOKEN = 'tok-123';
+            const harness = await startRemoteRunClaudeHarness();
+            expect(injectOptions().injectToken).toBe('tok-123');
+            expect(process.env.HAPPY_INJECT_TOKEN).toBeUndefined();
+            await harness.finish();
+        });
+
+        it('queues injected text like a phone message, without recording it as an app prompt', async () => {
+            process.env.HAPPY_INJECT_TOKEN = 'tok-123';
+            const harness = await startRemoteRunClaudeHarness();
+            injectOptions().onInject('reply from the launcher');
+            expect(harness.loopOptions.messageQueue.queue.map((item: any) => item.message)).toEqual(['reply from the launcher']);
+            await harness.finish();
+        });
+
+        it('routes /clear through the isolating queue push', async () => {
+            process.env.HAPPY_INJECT_TOKEN = 'tok-123';
+            const isolateSpy = vi.spyOn(MessageQueue2.prototype, 'pushIsolateAndClear');
+            const harness = await startRemoteRunClaudeHarness();
+            injectOptions().onInject('/clear');
+            expect(isolateSpy).toHaveBeenCalledWith('/clear', expect.anything());
+            isolateSpy.mockRestore();
+            await harness.finish();
+        });
+    });
 });

@@ -479,7 +479,20 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     let currentSession: Session | null = null;
 
     // Start Hook server for receiving Claude session notifications
+    // Owner patch (remote start): the launcher's token for POST /inject. Scrubbed so claude and its tools never inherit it.
+    const injectToken = process.env.HAPPY_INJECT_TOKEN;
+    delete process.env.HAPPY_INJECT_TOKEN;
     const hookServer = await startHookServer({
+        injectToken,
+        // Same as a phone message, minus recordAppPrompt: the scanner echoes it to the app.
+        onInject: (text) => {
+            const special = parseSpecialCommand(text);
+            if (special.type === 'compact' || special.type === 'clear') {
+                messageQueue.pushIsolateAndClear(special.originalMessage || text, currentEnhancedMode());
+            } else {
+                messageQueue.push(text, currentEnhancedMode());
+            }
+        },
         onSessionHook: (sessionId, data) => {
             logger.debug(`[START] Session hook received: ${sessionId}`, data);
 

@@ -58,6 +58,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse, Server } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { logger } from '@/ui/logger';
 
 /**
@@ -76,6 +77,9 @@ export interface SessionHookData {
 export interface HookServerOptions {
     /** Called when a session hook is received with a valid session ID */
     onSessionHook: (sessionId: string, data: SessionHookData) => void;
+    /** Owner patch (remote start): POST /inject is served only when both are set. */
+    injectToken?: string;
+    onInject?: (text: string) => void;
 }
 
 export interface HookServer {
@@ -92,7 +96,7 @@ export interface HookServer {
  * @returns Promise resolving to the server instance with port info
  */
 export async function startHookServer(options: HookServerOptions): Promise<HookServer> {
-    const { onSessionHook } = options;
+    const { onSessionHook, injectToken, onInject } = options;
 
     return new Promise((resolve, reject) => {
         const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -139,6 +143,33 @@ export async function startHookServer(options: HookServerOptions): Promise<HookS
                     if (!res.headersSent) {
                         res.writeHead(500).end('error');
                     }
+                }
+                return;
+            }
+
+            if (req.method === 'POST' && req.url === '/inject' && injectToken && onInject) {
+                const given = req.headers['x-happy-inject-token'];
+                const tokenOk = typeof given === 'string'
+                    && given.length === injectToken.length
+                    && timingSafeEqual(Buffer.from(given), Buffer.from(injectToken));
+                if (!tokenOk) {
+                    res.writeHead(401).end('unauthorized');
+                    return;
+                }
+                try {
+                    const chunks: Buffer[] = [];
+                    for await (const chunk of req) chunks.push(chunk as Buffer);
+                    let text: unknown;
+                    try { text = JSON.parse(Buffer.concat(chunks).toString('utf-8'))?.text; } catch { /* 400 below */ }
+                    if (typeof text !== 'string' || !text.trim()) {
+                        res.writeHead(400).end('text required');
+                        return;
+                    }
+                    onInject(text);
+                    res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
+                } catch (error) {
+                    logger.debug('[hookServer] Error handling inject:', error);
+                    if (!res.headersSent) res.writeHead(500).end('error');
                 }
                 return;
             }
