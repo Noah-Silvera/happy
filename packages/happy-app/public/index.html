@@ -22,6 +22,14 @@
       body {
         overflow: hidden;
       }
+      /* Pin the document: iOS Safari scrolls it to reveal a focused input and leaves it scrolled
+         after the keyboard closes, which cuts off the top and leaves a gap below the composer. */
+      html,
+      body {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+      }
       /* These styles make the root element full-height */
       #root {
         display: flex;
@@ -37,5 +45,26 @@
     </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
+    <script>
+      // Undo iOS Safari's focus scroll once the keyboard closes (visual viewport grows back) or a field blurs.
+      (function () {
+        function reset() {
+          if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+          document.documentElement.scrollTop = 0;
+          document.body.scrollTop = 0;
+        }
+        function later() {
+          reset();
+          setTimeout(reset, 100);
+          setTimeout(reset, 350);
+        }
+        window.addEventListener('focusout', later);
+        window.addEventListener('scroll', function () {
+          var a = document.activeElement;
+          if (!a || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) reset();
+        });
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', later);
+      })();
+    </script>
   </body>
 </html>
