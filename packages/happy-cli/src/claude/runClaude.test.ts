@@ -88,6 +88,10 @@ vi.mock('@/claude/claudeLocal', () => ({
     claudeLocal: vi.fn(),
 }));
 
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { runClaude } from './runClaude';
 
 function createDeferred<T>() {
@@ -113,6 +117,7 @@ async function startRemoteRunClaudeHarness(opts: {
     metadata?: Record<string, unknown>;
     updateAgentState?: ReturnType<typeof vi.fn>;
     registerHandler?: ReturnType<typeof vi.fn>;
+    startOptions?: Record<string, unknown>;
 } = {}) {
     let metadata = opts.metadata ?? {
         claudeSessionId: 'claude-session-1',
@@ -170,6 +175,7 @@ async function startRemoteRunClaudeHarness(opts: {
     } as any, {
         startingMode: 'remote',
         shouldStartDaemon: false,
+        ...opts.startOptions,
     });
 
     await vi.waitFor(() => {
@@ -921,5 +927,27 @@ describe('runClaude remote JSONL scanner', () => {
 
         expect(harness.loopOptions.messageQueue.queue).toHaveLength(1);
         await harness.finish();
+    });
+
+    it('pushes the --happy-initial-prompt-file text into the queue before loop() starts', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'happy-prompt-'));
+        const promptFile = join(dir, 'first.prompt');
+        writeFileSync(promptFile, 'do the first thing\nthen the second');
+        const pushSpy = vi.spyOn(MessageQueue2.prototype, 'push');
+        const harness = await startRemoteRunClaudeHarness({ startOptions: { initialPromptFile: promptFile } });
+        expect(harness.loopOptions.messageQueue.queue.map((item: any) => item.message)).toEqual(['do the first thing\nthen the second']);
+        expect(pushSpy).toHaveBeenCalledWith('do the first thing\nthen the second', expect.anything());
+        expect(pushSpy.mock.invocationCallOrder[0]).toBeLessThan(mockLoop.mock.invocationCallOrder[0]);
+        pushSpy.mockRestore();
+    });
+
+    it('writes the hook server port to --happy-inject-port-file with mode 0600 and removes it on exit', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'happy-inject-'));
+        const portFile = join(dir, 'session.inject');
+        const harness = await startRemoteRunClaudeHarness({ startOptions: { injectPortFile: portFile } });
+        expect(JSON.parse(readFileSync(portFile, 'utf8'))).toEqual({ port: 23456 });
+        expect(statSync(portFile).mode & 0o777).toBe(0o600);
+        await harness.finish();
+        expect(existsSync(portFile)).toBe(false);
     });
 });
