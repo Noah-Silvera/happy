@@ -37,6 +37,7 @@ import { decodeBase64, encodeBase64 } from '@/api/encryption';
 import type { Session as ApiSession } from '@/api/types';
 import { getProjectPath } from './utils/path';
 import { readFile } from 'node:fs/promises';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RawJSONLinesSchema, type RawJSONLines } from './types';
 
@@ -48,6 +49,10 @@ export interface StartOptions {
     permissionMode?: PermissionMode
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     startingMode?: 'local' | 'remote'
+    /** Text pushed as the first message before the loop starts (remote start has no other way in). */
+    initialPromptFile?: string
+    /** Written as {port} (0600) once the local hook server is up, removed on exit. */
+    injectPortFile?: string
     shouldStartDaemon?: boolean
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
@@ -504,6 +509,14 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         }
     });
     logger.debug(`[START] Hook server started on port ${hookServer.port}`);
+    // Lets a launcher find this session's local hook server (owner patch: remote start).
+    const injectPortFile = options.injectPortFile;
+    if (injectPortFile) {
+        writeFileSync(injectPortFile, JSON.stringify({ port: hookServer.port }), { mode: 0o600 });
+    }
+    const removeInjectPortFile = () => {
+        if (injectPortFile) rmSync(injectPortFile, { force: true });
+    };
 
     // Generate hook settings file for Claude
     const hookSettingsPath = generateHookSettingsFile(hookServer.port);
@@ -911,6 +924,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             // Stop Hook server and cleanup settings file
             hookServer.stop();
             cleanupHookSettingsFile(hookSettingsPath);
+            removeInjectPortFile();
 
             // Stop the remote JSONL scanner (file watchers + intervals).
             await remoteScanner.cleanup();
@@ -945,6 +959,12 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // want the metadata stamped — it's the user explicitly choosing to
     // retire the session, not just disconnecting.
     registerKillSessionHandler(session.rpcHandlerManager, () => cleanup({ archive: true }));
+
+    // Remote start: remote mode blocks until a message arrives, so the launcher's first prompt goes in a file.
+    if (options.initialPromptFile) {
+        const initialPrompt = readFileSync(options.initialPromptFile, 'utf8');
+        if (initialPrompt.trim()) messageQueue.push(initialPrompt, currentEnhancedMode());
+    }
 
     // Create claude loop
     const exitCode = await loop({
@@ -1004,6 +1024,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // Stop Hook server and cleanup settings file
     hookServer.stop();
     cleanupHookSettingsFile(hookSettingsPath);
+    removeInjectPortFile();
     logger.debug('Stopped Hook server and cleaned up settings file');
 
     // Exit with the code from Claude
