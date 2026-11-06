@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Fastify } from "../types";
+import { resolveBaseUrl } from "../utils/resolveBaseUrl";
 import { db } from "@/storage/db";
 import { inTx } from "@/storage/inTx";
 import { s3client, s3bucket, isLocalStorage, getLocalFilesDir } from "@/storage/files";
@@ -33,16 +34,6 @@ function validRef(id: string, ref: string): boolean {
     ref.startsWith(prefix) &&
     fileParams.shape.avatarFile.safeParse(ref.slice(prefix.length)).success
   );
-}
-
-function baseUrl(request: { headers: Record<string, string | string[] | undefined> }): string {
-  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL;
-  const host = request.headers["x-forwarded-host"] ?? request.headers.host;
-  const proto = request.headers["x-forwarded-proto"] ?? "http";
-  const hostname = Array.isArray(host) ? host[0] : host;
-  if (typeof hostname === "string" && hostname.length > 0)
-    return `${Array.isArray(proto) ? proto[0] : proto}://${hostname}`;
-  return `http://localhost:${process.env.PORT || "3005"}`;
 }
 
 export function sessionAvatarRoutes(app: Fastify) {
@@ -129,7 +120,7 @@ export function sessionAvatarRoutes(app: Fastify) {
         return reply.send({
           ref,
           method: "PUT",
-          uploadUrl: `${baseUrl(request)}/v1/sessions/${session.id}/avatar/${file}`,
+          uploadUrl: `${resolveBaseUrl(request)}/v1/sessions/${session.id}/avatar/${file}`,
         });
       const policy = s3client.newPostPolicy();
       policy.setBucket(s3bucket);
@@ -229,7 +220,7 @@ export function sessionAvatarRoutes(app: Fastify) {
         return reply.code(404).send({ error: "Session avatar not found" });
       const ref = session.avatarRef;
       const downloadUrl = isLocalStorage()
-        ? `${baseUrl(request)}/v1/sessions/${session.id}/avatar/${path.basename(ref)}`
+        ? `${resolveBaseUrl(request)}/v1/sessions/${session.id}/avatar/${path.basename(ref)}`
         : await s3client.presignedGetObject(s3bucket, ref, 15 * 60);
       return reply.send({ ref, downloadUrl });
     },

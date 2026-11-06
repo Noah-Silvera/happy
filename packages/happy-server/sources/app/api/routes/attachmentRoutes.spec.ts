@@ -295,6 +295,27 @@ describe("attachmentRoutes — POST request-download", () => {
         expect(body.downloadUrl).toContain("/v1/sessions/s1/attachments/abc.enc");
     });
 
+    it("returns a loopback-origin downloadUrl for a loopback Host even when PUBLIC_URL is set", async () => {
+        vi.stubEnv("PUBLIC_URL", "https://happy.example.com");
+        try {
+            seedSession("s1", "u1");
+            state.useLocalStorage = true;
+            app = await createApp();
+
+            const res = await app.inject({
+                method: "POST",
+                url: "/v1/sessions/s1/attachments/request-download",
+                headers: { "x-user-id": "u1", host: "127.0.0.1:3005" },
+                payload: { ref: "sessions/s1/attachments/abc.enc" },
+            });
+
+            expect(res.statusCode).toBe(200);
+            expect(res.json().downloadUrl.startsWith("http://127.0.0.1:3005/")).toBe(true);
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
     it("returns a presigned S3 GET URL in S3 mode", async () => {
         seedSession("s1", "u1");
         state.useLocalStorage = false;
