@@ -850,6 +850,40 @@ describe('runClaude remote JSONL scanner', () => {
         await harness.finish();
     });
 
+    it('publishes the starting model as currentModelCode in the initial metadata', async () => {
+        const harness = await startRemoteRunClaudeHarness({ startOptions: { model: 'claude-fable-5-2' } });
+        expect(harness.api.getOrCreateSession).toHaveBeenCalledWith(expect.objectContaining({
+            metadata: expect.objectContaining({ currentModelCode: 'claude-fable-5-2' }),
+        }));
+        await harness.finish();
+    });
+
+    it('omits currentModelCode from the initial metadata when no model is set', async () => {
+        const harness = await startRemoteRunClaudeHarness();
+        const sent = (harness.api.getOrCreateSession.mock.calls as any[][])[0][0].metadata;
+        expect('currentModelCode' in sent).toBe(false);
+        await harness.finish();
+    });
+
+    it('updates currentModelCode in metadata when a message switches the model', async () => {
+        const harness = await startRemoteRunClaudeHarness({
+            metadata: { claudeSessionId: 'claude-session-1', currentModelCode: 'claude-fable-5-2' },
+            startOptions: { model: 'claude-fable-5-2' },
+        });
+        const userMessageHandler = harness.sessionClient.onUserMessage.mock.calls[0][0];
+
+        await userMessageHandler({
+            content: { text: 'switch' },
+            meta: { model: 'claude-opus-5-5' },
+        });
+
+        expect(harness.sessionClient.getMetadata()).toMatchObject({
+            claudeSessionId: 'claude-session-1',
+            currentModelCode: 'claude-opus-5-5',
+        });
+        await harness.finish();
+    });
+
     it('rejects Claude goal-action while Claude is still thinking', async () => {
         const harness = await startRemoteRunClaudeHarness();
         await vi.waitFor(() => {
