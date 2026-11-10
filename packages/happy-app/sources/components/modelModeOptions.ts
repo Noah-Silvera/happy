@@ -633,6 +633,24 @@ export function getRigCurrentModelOptionKey(metadata: Metadata | null | undefine
     return getRigSelectedModelKey(metadata);
 }
 
+/**
+ * Model keys in the order the composer's model chip consults them. For a
+ * non-Rig session the model it is running outranks the account default:
+ * otherwise a reply from the client sends the default as meta.model and
+ * silently switches the session.
+ */
+export function getSessionModelPreferenceKeys(args: {
+    isRig: boolean;
+    sessionModelMode: string | null | undefined;
+    accountDefaultModelKey: string | null | undefined;
+    metadata: Metadata | null | undefined;
+}): Array<string | null | undefined> {
+    const { isRig, sessionModelMode, accountDefaultModelKey, metadata } = args;
+    return isRig
+        ? [sessionModelMode, getRigCurrentModelOptionKey(metadata), undefined]
+        : [sessionModelMode, metadata?.currentModelCode, accountDefaultModelKey];
+}
+
 // Default effort for a model — highest the model allows
 export function getDefaultEffortKeyForModel(flavor: AgentFlavor, modelKey: string): string | null {
     const levels = getEffortLevelsForModel(flavor, modelKey);

@@ -3,7 +3,7 @@ import {
     getAvailableModels,
     getAvailablePermissionModes,
     getEffortLevelsForModel,
-    getRigCurrentModelOptionKey,
+    getSessionModelPreferenceKeys,
     resolveCurrentOption,
     type EffortLevel,
 } from '@/components/modelModeOptions';
@@ -49,14 +49,21 @@ export function useComposerModes(session: Session | null | undefined): ComposerM
     // row that runs the same model. The key itself is left alone, so the
     // session keeps sending exactly what it was started with.
     const sessionModelMode = isRig ? session?.modelMode : retireModelMode(flavor, session?.modelMode);
+    const modelPreferenceKeys = React.useMemo(() => getSessionModelPreferenceKeys({
+        isRig,
+        sessionModelMode,
+        accountDefaultModelKey: effectiveAgentDefaults.modelMode,
+        metadata,
+    }), [isRig, sessionModelMode, effectiveAgentDefaults.modelMode, metadata]);
     const availableModels = React.useMemo(() => (
         getAvailableModels(
             flavor,
             metadata,
             t,
-            sessionModelMode ?? (isRig ? null : effectiveAgentDefaults.modelMode),
+            // Rig only surfaces the local pick; non-Rig also surfaces an unlisted running model.
+            isRig ? (sessionModelMode ?? null) : (modelPreferenceKeys.find((key) => !!key) ?? null),
         )
-    ), [flavor, metadata, sessionModelMode, effectiveAgentDefaults.modelMode, isRig]);
+    ), [flavor, metadata, sessionModelMode, modelPreferenceKeys, isRig]);
     const availableModes = React.useMemo(() => (
         getAvailablePermissionModes(flavor, metadata, t, session?.permissionMode)
     ), [flavor, metadata, session?.permissionMode]);
@@ -76,12 +83,8 @@ export function useComposerModes(session: Session | null | undefined): ComposerM
     ), [availableModes, session?.permissionMode, effectiveAgentDefaults.permissionMode, metadata?.currentOperatingModeCode, metadata?.permissionMode, metadata?.session?.permissionMode, isRig]);
 
     const modelMode = React.useMemo<ModelMode | null>(() => (
-        resolveCurrentOption(availableModels, [
-            sessionModelMode,
-            isRig ? getRigCurrentModelOptionKey(metadata) : effectiveAgentDefaults.modelMode,
-            isRig ? undefined : metadata?.currentModelCode,
-        ])
-    ), [availableModels, sessionModelMode, effectiveAgentDefaults.modelMode, metadata, isRig]);
+        resolveCurrentOption(availableModels, modelPreferenceKeys)
+    ), [availableModels, modelPreferenceKeys]);
 
     const modelKey = modelMode?.key ?? 'default';
     const availableEffortLevels = React.useMemo<EffortLevel[]>(() => (

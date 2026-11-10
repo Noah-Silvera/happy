@@ -152,6 +152,8 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         lifecycleStateSince: Date.now(),
         flavor: 'claude',
         queueing: true,
+        // Lets the app show the model this session runs rather than the account default.
+        ...(options.model ? { currentModelCode: options.model } : {}),
         sandbox: sandboxConfig?.enabled ? sandboxConfig : null,
         dangerouslySkipPermissions,
         ...(forkedFromSessionId ? { parentSessionId: forkedFromSessionId } : {}),
@@ -721,6 +723,13 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         let messageModel = currentModel;
         if (message.meta?.hasOwnProperty('model')) {
             messageModel = message.meta.model || undefined; // null becomes undefined
+            if (messageModel !== currentModel) {
+                // Keep the app's model chip on what actually runs (phone replies once reset it to the account default).
+                session.updateMetadata((meta) => {
+                    const { currentModelCode: _previous, ...rest } = meta;
+                    return messageModel ? { ...rest, currentModelCode: messageModel } : rest;
+                });
+            }
             currentModel = messageModel;
             logger.debug(`[loop] Model updated from user message: ${messageModel || 'reset to default'}`);
         } else {
