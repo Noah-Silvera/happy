@@ -176,6 +176,7 @@ export function getGeminiPermissionModes(translate: Translate): PermissionMode[]
 // models: at 200K, compacting early.
 export function getClaudeModelModes(): ModelMode[] {
     return [
+        { key: 'claude-fable-5-2', name: 'Fable 5.2', description: '1M context', providerId: 'anthropic', providerName: 'Anthropic' },
         { key: 'claude-fable-5-1', name: 'Fable 5.1', description: '1M context', providerId: 'anthropic', providerName: 'Anthropic' },
         { key: 'claude-fable-5', name: 'Fable 5', description: null, providerId: 'anthropic', providerName: 'Anthropic' },
         { key: 'claude-opus-5-5', name: 'Opus 5.5', description: null, providerId: 'anthropic', providerName: 'Anthropic' },
