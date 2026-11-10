@@ -156,6 +156,7 @@ describe('modelModeOptions', () => {
     it('only offers the current-generation claude models', () => {
         const models = getClaudeModelModes();
         expect(models.map((model) => model.key)).toEqual([
+            'claude-fable-5-2',
             'claude-fable-5-1',
             'claude-fable-5',
             'claude-opus-5-5',
@@ -164,6 +165,7 @@ describe('modelModeOptions', () => {
             'claude-haiku-5-5',
         ]);
         expect(models.map((model) => model.name)).toEqual([
+            'Fable 5.2',
             'Fable 5.1',
             'Fable 5',
             'Opus 5.5',
@@ -239,7 +241,7 @@ describe('modelModeOptions', () => {
     it('offers claude the SDK effort union for every model', () => {
         // Claude's scale belongs to the SDK, not the model: an unreachable level
         // is silently downgraded, so every model gets the same list.
-        for (const model of ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']) {
+        for (const model of ['claude-fable-5-2', 'claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']) {
             const keys = getEffortLevelsForModel('claude', model).map((level) => level.key);
             expect(keys).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
             // Claude's floor is `low`; there is no off.
