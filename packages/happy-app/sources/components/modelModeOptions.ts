@@ -176,6 +176,7 @@ export function getGeminiPermissionModes(translate: Translate): PermissionMode[]
 // models: at 200K, compacting early.
 export function getClaudeModelModes(): ModelMode[] {
     return [
+        { key: 'claude-fable-5-2', name: 'Fable 5.2', description: '1M context', providerId: 'anthropic', providerName: 'Anthropic' },
         { key: 'claude-fable-5-1', name: 'Fable 5.1', description: '1M context', providerId: 'anthropic', providerName: 'Anthropic' },
         { key: 'claude-fable-5', name: 'Fable 5', description: null, providerId: 'anthropic', providerName: 'Anthropic' },
         { key: 'claude-opus-5-5', name: 'Opus 5.5', description: null, providerId: 'anthropic', providerName: 'Anthropic' },
@@ -631,6 +632,24 @@ export function getEffortLevelsForModel(
 
 export function getRigCurrentModelOptionKey(metadata: Metadata | null | undefined): string | null {
     return getRigSelectedModelKey(metadata);
+}
+
+/**
+ * Model keys in the order the composer's model chip consults them. For a
+ * non-Rig session the model it is running outranks the account default:
+ * otherwise a reply from the client sends the default as meta.model and
+ * silently switches the session.
+ */
+export function getSessionModelPreferenceKeys(args: {
+    isRig: boolean;
+    sessionModelMode: string | null | undefined;
+    accountDefaultModelKey: string | null | undefined;
+    metadata: Metadata | null | undefined;
+}): Array<string | null | undefined> {
+    const { isRig, sessionModelMode, accountDefaultModelKey, metadata } = args;
+    return isRig
+        ? [sessionModelMode, getRigCurrentModelOptionKey(metadata), undefined]
+        : [sessionModelMode, metadata?.currentModelCode, accountDefaultModelKey];
 }
 
 // Default effort for a model — highest the model allows

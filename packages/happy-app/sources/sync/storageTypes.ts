@@ -24,6 +24,8 @@ export type RigComposerDraft = z.infer<typeof RigComposerDraftSchema>;
 
 export const MetadataSchema = z.object({
     bot: RigBotSchema.optional(),
+    /** happy-cli sessions set this when they honor meta.delivery (queue/steer). */
+    queueing: z.boolean().optional().catch(undefined),
     models: z.array(z.object({
         code: z.string(),
         value: z.string(),

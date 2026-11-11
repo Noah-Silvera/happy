@@ -37,6 +37,7 @@ import { decodeBase64, encodeBase64 } from '@/api/encryption';
 import type { Session as ApiSession } from '@/api/types';
 import { getProjectPath } from './utils/path';
 import { readFile } from 'node:fs/promises';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RawJSONLinesSchema, type RawJSONLines } from './types';
 
@@ -48,6 +49,10 @@ export interface StartOptions {
     permissionMode?: PermissionMode
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     startingMode?: 'local' | 'remote'
+    /** Text pushed as the first message before the loop starts (remote start has no other way in). */
+    initialPromptFile?: string
+    /** Written as {port} (0600) once the local hook server is up, removed on exit. */
+    injectPortFile?: string
     shouldStartDaemon?: boolean
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
@@ -146,6 +151,9 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         lifecycleState: 'running',
         lifecycleStateSince: Date.now(),
         flavor: 'claude',
+        queueing: true,
+        // Lets the app show the model this session runs rather than the account default.
+        ...(options.model ? { currentModelCode: options.model } : {}),
         sandbox: sandboxConfig?.enabled ? sandboxConfig : null,
         dangerouslySkipPermissions,
         ...(forkedFromSessionId ? { parentSessionId: forkedFromSessionId } : {}),
@@ -291,6 +299,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             ...meta,
             lifecycleState: 'running',
             archivedBy: undefined,
+            queueing: true,
         }));
     }
 
@@ -472,7 +481,20 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     let currentSession: Session | null = null;
 
     // Start Hook server for receiving Claude session notifications
+    // Owner patch (remote start): the launcher's token for POST /inject. Scrubbed so claude and its tools never inherit it.
+    const injectToken = process.env.HAPPY_INJECT_TOKEN;
+    delete process.env.HAPPY_INJECT_TOKEN;
     const hookServer = await startHookServer({
+        injectToken,
+        // Same as a phone message, minus recordAppPrompt: the scanner echoes it to the app.
+        onInject: (text) => {
+            const special = parseSpecialCommand(text);
+            if (special.type === 'compact' || special.type === 'clear') {
+                messageQueue.pushIsolateAndClear(special.originalMessage || text, currentEnhancedMode());
+            } else {
+                messageQueue.push(text, currentEnhancedMode());
+            }
+        },
         onSessionHook: (sessionId, data) => {
             logger.debug(`[START] Session hook received: ${sessionId}`, data);
 
@@ -502,6 +524,14 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         }
     });
     logger.debug(`[START] Hook server started on port ${hookServer.port}`);
+    // Lets a launcher find this session's local hook server (owner patch: remote start).
+    const injectPortFile = options.injectPortFile;
+    if (injectPortFile) {
+        writeFileSync(injectPortFile, JSON.stringify({ port: hookServer.port }), { mode: 0o600 });
+    }
+    const removeInjectPortFile = () => {
+        if (injectPortFile) rmSync(injectPortFile, { force: true });
+    };
 
     // Generate hook settings file for Claude
     const hookSettingsPath = generateHookSettingsFile(hookServer.port);
@@ -693,6 +723,13 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         let messageModel = currentModel;
         if (message.meta?.hasOwnProperty('model')) {
             messageModel = message.meta.model || undefined; // null becomes undefined
+            if (messageModel !== currentModel) {
+                // Keep the app's model chip on what actually runs (phone replies once reset it to the account default).
+                session.updateMetadata((meta) => {
+                    const { currentModelCode: _previous, ...rest } = meta;
+                    return messageModel ? { ...rest, currentModelCode: messageModel } : rest;
+                });
+            }
             currentModel = messageModel;
             logger.debug(`[loop] Model updated from user message: ${messageModel || 'reset to default'}`);
         } else {
@@ -830,6 +867,15 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             }
         }
 
+        // A phone "steer" while a run is live goes straight into the SDK input
+        // stream; if no stream is open it falls through to the queue. Queue or
+        // unset delivery keeps the pre-existing wait-for-the-turn behavior.
+        if (message.meta?.delivery === 'steer' && currentSession?.thinking
+            && currentSession.steer(message.content.text, attachmentsForThisMessage)) {
+            logger.debug('[loop] Steered user message into the live run');
+            return;
+        }
+
         // Push with resolved permission mode, model, system prompts, and tools
         messageQueue.push(message.content.text, currentEnhancedMode(), attachmentsForThisMessage);
         logger.debugLargeJson('User message pushed to queue:', message)
@@ -900,6 +946,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             // Stop Hook server and cleanup settings file
             hookServer.stop();
             cleanupHookSettingsFile(hookSettingsPath);
+            removeInjectPortFile();
 
             // Stop the remote JSONL scanner (file watchers + intervals).
             await remoteScanner.cleanup();
@@ -934,6 +981,12 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // want the metadata stamped — it's the user explicitly choosing to
     // retire the session, not just disconnecting.
     registerKillSessionHandler(session.rpcHandlerManager, () => cleanup({ archive: true }));
+
+    // Remote start: remote mode blocks until a message arrives, so the launcher's first prompt goes in a file.
+    if (options.initialPromptFile) {
+        const initialPrompt = readFileSync(options.initialPromptFile, 'utf8');
+        if (initialPrompt.trim()) messageQueue.push(initialPrompt, currentEnhancedMode());
+    }
 
     // Create claude loop
     const exitCode = await loop({
@@ -993,6 +1046,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // Stop Hook server and cleanup settings file
     hookServer.stop();
     cleanupHookSettingsFile(hookSettingsPath);
+    removeInjectPortFile();
     logger.debug('Stopped Hook server and cleaned up settings file');
 
     // Exit with the code from Claude

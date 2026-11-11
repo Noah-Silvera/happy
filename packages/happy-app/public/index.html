@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover: without it iOS Safari keeps the layout viewport inside the safe area, so
+         env(safe-area-inset-*) is 0 and the safe-area padding in the components never applies. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
+    <title>%WEB_TITLE%</title>
+    <!-- Opaque 180px icon: iOS paints transparency black on the home-screen tile. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height; dvh tracks iOS Safari's collapsing toolbar, vh is the fallback */
+      html,
+      body,
+      #root {
+        height: 100vh;
+        height: 100dvh;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* Pin the document: iOS Safari scrolls it to reveal a focused input and leaves it scrolled
+         after the keyboard closes, which cuts off the top and leaves a gap below the composer. */
+      html,
+      body {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+    <script>
+      // Undo iOS Safari's focus scroll once the keyboard closes (visual viewport grows back) or a field blurs.
+      (function () {
+        function reset() {
+          if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+          document.documentElement.scrollTop = 0;
+          document.body.scrollTop = 0;
+        }
+        // The document is pinned, so iOS no longer scrolls a focused composer above the keyboard (which overlays the
+        // layout viewport). While the keyboard is up, slide the whole app up by its height, and back down on close.
+        function fit() {
+          var vv = window.visualViewport;
+          var root = document.getElementById('root');
+          if (!vv || !root) return;
+          var kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          if (kb < 100) kb = 0;
+          root.style.transition = 'transform 0.25s ease-out';
+          root.style.transform = kb ? 'translateY(' + -kb + 'px)' : '';
+        }
+        function later() {
+          reset();
+          fit();
+          setTimeout(function () { reset(); fit(); }, 100);
+          setTimeout(function () { reset(); fit(); }, 350);
+        }
+        window.addEventListener('focusout', later);
+        window.addEventListener('focusin', later);
+        window.addEventListener('scroll', function () {
+          var a = document.activeElement;
+          if (!a || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) reset();
+        });
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', later);
+          window.visualViewport.addEventListener('scroll', fit);
+        }
+      })();
+    </script>
+  </body>
+</html>

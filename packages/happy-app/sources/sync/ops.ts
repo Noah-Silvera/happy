@@ -1008,6 +1008,13 @@ export async function sessionBash(sessionId: string, request: SessionBashRequest
     }
 }
 
+/** Map the relay's raw "no daemon" error to a user-facing offline message. */
+export function friendlyReadFileError(message: string): string {
+    return message === 'RPC method not available'
+        ? "This session is offline, so its files can't be read"
+        : message;
+}
+
 /**
  * Read a file from the session
  */
@@ -1027,7 +1034,7 @@ export async function sessionReadFile(sessionId: string, path: string): Promise<
     } catch (error) {
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: friendlyReadFileError(error instanceof Error ? error.message : 'Unknown error')
         };
     }
 }

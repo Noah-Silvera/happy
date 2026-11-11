@@ -187,6 +187,7 @@ export function rpcHandler(userId: string, socket: Socket, io: Server) {
 
             if (targets.length === 0) {
                 finish('not_available');
+                log({ module: 'websocket', level: 'warn' }, `rpc-call not_available: method=${method} user=${userId}`);
                 callback?.({ ok: false, error: 'RPC method not available' });
                 return;
             }

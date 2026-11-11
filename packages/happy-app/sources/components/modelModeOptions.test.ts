@@ -16,6 +16,7 @@ import {
     getDefaultEffortKey,
     getDefaultModelKey,
     getEffortLevelsForModel,
+    getSessionModelPreferenceKeys,
     getDefaultPermissionModeKey,
     groupModelModesByProvider,
     includeConfiguredModel,
@@ -156,6 +157,7 @@ describe('modelModeOptions', () => {
     it('only offers the current-generation claude models', () => {
         const models = getClaudeModelModes();
         expect(models.map((model) => model.key)).toEqual([
+            'claude-fable-5-2',
             'claude-fable-5-1',
             'claude-fable-5',
             'claude-opus-5-5',
@@ -164,6 +166,7 @@ describe('modelModeOptions', () => {
             'claude-haiku-5-5',
         ]);
         expect(models.map((model) => model.name)).toEqual([
+            'Fable 5.2',
             'Fable 5.1',
             'Fable 5',
             'Opus 5.5',
@@ -239,7 +242,7 @@ describe('modelModeOptions', () => {
     it('offers claude the SDK effort union for every model', () => {
         // Claude's scale belongs to the SDK, not the model: an unreachable level
         // is silently downgraded, so every model gets the same list.
-        for (const model of ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']) {
+        for (const model of ['claude-fable-5-2', 'claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']) {
             const keys = getEffortLevelsForModel('claude', model).map((level) => level.key);
             expect(keys).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
             // Claude's floor is `low`; there is no off.
@@ -497,5 +500,40 @@ describe('modelModeOptions', () => {
     it('cuts mid-word only when there is no boundary to fall back on', () => {
         expect(truncateModelLabel('Supercalifragilisticexpialidocious'))
             .toBe('Supercalifragili\u2026');
+    });
+
+    describe('session model preference', () => {
+        const pick = (
+            sessionModelMode: string | null | undefined,
+            currentModelCode: string | undefined,
+        ) => {
+            const metadata = currentModelCode ? ({ currentModelCode } as any) : ({} as any);
+            const keys = getSessionModelPreferenceKeys({
+                isRig: false,
+                sessionModelMode,
+                accountDefaultModelKey: 'claude-sonnet-5-5',
+                metadata,
+            });
+            const selectedKey = keys.find((key) => !!key);
+            return resolveCurrentOption(getAvailableModels('claude', metadata, translate, selectedKey), keys);
+        };
+
+        it('shows the model the session runs, not the account default', () => {
+            expect(pick(undefined, 'claude-fable-5-2')?.key).toBe('claude-fable-5-2');
+        });
+
+        it('lets a local pick win over the running model', () => {
+            expect(pick('claude-opus-5-5', 'claude-fable-5-2')?.key).toBe('claude-opus-5-5');
+        });
+
+        it('falls back to the account default without a running model', () => {
+            expect(pick(undefined, undefined)?.key).toBe('claude-sonnet-5-5');
+        });
+
+        it('adds a row for a running model the list does not offer', () => {
+            const option = pick(undefined, 'claude-sonnet-5');
+            expect(option?.key).toBe('claude-sonnet-5');
+            expect(option?.name).toBe('Sonnet 5');
+        });
     });
 });
