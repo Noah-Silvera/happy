@@ -32,17 +32,35 @@ export class Session {
     /** Set by the remote launcher while a Claude query accepts input; null otherwise. */
     private steerSink: ((content: MessageParam['content']) => void) | null = null;
 
+    /** Steers injected into the live run that no completed turn has confirmed yet. */
+    private pendingSteers: { text: string; attachments: PendingAttachment[]; mode: EnhancedMode }[] = [];
+
     setSteerSink(sink: ((content: MessageParam['content']) => void) | null) {
         this.steerSink = sink;
+        // A new run starts with nothing pending; null (run ended) keeps them for an abort re-queue.
+        if (sink) this.pendingSteers = [];
     }
 
     /** Inject a prompt into the running turn. False when no live stream can take it. */
-    steer(text: string, attachments: PendingAttachment[]): boolean {
+    steer(text: string, attachments: PendingAttachment[], mode: EnhancedMode): boolean {
         if (!this.steerSink) return false;
         this.steerSink(buildUserContent(text, attachments));
+        this.pendingSteers.push({ text, attachments, mode });
         return true;
     }
-    
+
+    /** The turn completed, so every steer so far was seen by Claude. */
+    clearPendingSteers() {
+        this.pendingSteers = [];
+    }
+
+    /** After an abort: put unconfirmed steers back on the queue in order (duplicate beats loss). */
+    requeuePendingSteers() {
+        const pending = this.pendingSteers;
+        this.pendingSteers = [];
+        for (const { text, attachments, mode } of pending) this.queue.push(text, mode, attachments);
+    }
+
     /** Callbacks to be notified when session ID is found/changed */
     private sessionFoundCallbacks: ((sessionId: string) => void)[] = [];
     

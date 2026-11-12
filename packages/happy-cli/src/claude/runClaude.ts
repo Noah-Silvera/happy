@@ -836,7 +836,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         // stream; if no stream is open it falls through to the queue. Queue or
         // unset delivery keeps the pre-existing wait-for-the-turn behavior.
         if (message.meta?.delivery === 'steer' && currentSession?.thinking
-            && currentSession.steer(message.content.text, attachmentsForThisMessage)) {
+            && currentSession.steer(message.content.text, attachmentsForThisMessage, currentEnhancedMode())) {
             logger.debug('[loop] Steered user message into the live run');
             return;
         }
