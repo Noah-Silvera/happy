@@ -16,6 +16,7 @@ export function startDaemonControlServer({
   getChildren,
   stopSession,
   spawnSession,
+  resumeSession,
   requestShutdown,
   onHappySessionWebhook,
   getConnectionStatus,
@@ -23,6 +24,7 @@ export function startDaemonControlServer({
   getChildren: () => TrackedSession[];
   stopSession: (sessionId: string) => boolean;
   spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
+  resumeSession: (sessionId: string) => Promise<SpawnSessionResult>;
   requestShutdown: () => void;
   onHappySessionWebhook: (sessionId: string, metadata: Metadata, encryption?: SessionEncryptionData) => void;
   getConnectionStatus?: () => { machineId: string; cliVersion: string; serverUrl: string; connected: boolean };
@@ -125,6 +127,18 @@ export function startDaemonControlServer({
       logger.debug(`[CONTROL SERVER] Stop session request: ${sessionId}`);
       const success = stopSession(sessionId);
       return { success };
+    });
+
+    // Resume a stopped session from the daemon's persisted state
+    typed.post('/resume-session', {
+      schema: {
+        body: z.object({
+          sessionId: z.string()
+        })
+      }
+    }, async (request) => {
+      logger.debug(`[CONTROL SERVER] Resume session request: ${request.body.sessionId}`);
+      return await resumeSession(request.body.sessionId);
     });
 
     // Spawn new session

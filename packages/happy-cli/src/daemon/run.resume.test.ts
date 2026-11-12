@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   handlers: null as any,
   webhook: null as any,
   children: null as any,
+  localResume: null as any,
   persisted: {} as Record<string, any>,
   get: vi.fn(),
   spawn: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('./controlClient', () => ({
 vi.mock('./controlServer', () => ({ startDaemonControlServer: async (options: any) => {
   mocks.webhook = options.onHappySessionWebhook;
   mocks.children = options.getChildren;
+  mocks.localResume = options.resumeSession;
   return { port: 0, stop: vi.fn() };
 } }));
 vi.mock('@/api/api', () => ({ ApiClient: { create: async () => ({
@@ -104,6 +106,14 @@ describe('daemon resume fallback', () => {
         HAPPY_RECONNECT_ENCRYPTION_VARIANT: 'dataKey', HAPPY_RECONNECT_SEQ: '12',
       }) }),
     );
+  });
+
+  it('resumes a persisted session through the local control server without a client fallback', async () => {
+    mocks.persisted = { 'old-session': { ...fallback, metadata } };
+    await boot();
+    expect(await mocks.localResume('old-session')).toEqual({ type: 'success', sessionId: 'old-session' });
+    expect(mocks.spawn.mock.calls[0][0]).toContain('claude-old');
+    expect(mocks.get).not.toHaveBeenCalled();
   });
 
   it.each(['claude', 'codex'])('refreshes a missing %s provider ID from server metadata', async (flavor) => {
