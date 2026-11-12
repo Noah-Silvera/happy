@@ -890,7 +890,7 @@ describe('runClaude remote JSONL scanner', () => {
 
         await handler({ content: { text: 'change course' }, meta: { delivery: 'steer' } });
 
-        expect(steer).toHaveBeenCalledWith('change course', []);
+        expect(steer).toHaveBeenCalledWith('change course', [], expect.anything());
         expect(harness.loopOptions.messageQueue.queue).toEqual([]);
         await harness.finish();
     });

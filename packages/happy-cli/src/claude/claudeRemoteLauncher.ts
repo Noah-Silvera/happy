@@ -88,6 +88,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         logger.debug('[remote]: doAbort');
         session.onAbort();
         await abort();
+        session.requeuePendingSteers();
     }
 
     async function doSwitch() {
@@ -386,6 +387,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     },
                     onThinkingChange: session.onThinkingChange,
                     onSteerSink: (sink) => session.setSteerSink(sink),
+                    onTurnComplete: () => session.clearPendingSteers(),
                     claudeEnvVars: session.claudeEnvVars,
                     claudeArgs: session.claudeArgs,
                     onMessage,

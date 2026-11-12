@@ -4,6 +4,9 @@ import { claudeRemoteLauncher } from './claudeRemoteLauncher';
 import { closeClaudeTurnWithStatus, mapClaudeLogMessageToSessionEnvelopes, type ClaudeSessionProtocolState } from './utils/sessionProtocolMapper';
 import { CLAUDE_LOGIN_EXPIRED_MESSAGE } from './utils/providerAuth';
 import type { SessionEnvelope } from '@slopus/happy-wire';
+import { Session } from './session';
+import { MessageQueue2 } from '@/utils/MessageQueue2';
+import type { EnhancedMode } from './loop';
 
 // Exercise the real outgoing queue, SDK converter and protocol mapper without
 // a terminal, credential store, provider process, relay or push service.
@@ -93,5 +96,67 @@ describe('claudeRemoteLauncher provider auth', () => {
         expect(JSON.stringify(session.client.sendSessionEvent.mock.calls)).not.toContain('fixture-secret');
         expect(notification).not.toHaveBeenCalled();
         expect(claudeRemote).toHaveBeenCalledTimes(2);
+    });
+});
+describe('claudeRemoteLauncher abort keeps steered messages', () => {
+    beforeEach(() => { vi.mocked(claudeRemote).mockReset(); });
+    const mode = { permissionMode: 'default' } as EnhancedMode;
+
+    // Real Session + queue over the shared fixture; claudeRemote ends when the launcher aborts it.
+    function setup(runBody: (opts: any, session: Session) => void) {
+        const f = fixture();
+        const handlers = new Map<string, () => Promise<void>>();
+        f.session.client.rpcHandlerManager.registerHandler = (n: string, h: () => Promise<void>) => handlers.set(n, h);
+        const queue = new MessageQueue2<EnhancedMode>((m) => JSON.stringify(m));
+        const session = new Session({
+            api: f.session.api as any, client: { ...f.session.client, keepAlive: vi.fn() } as any,
+            path: '/fixture/project', logPath: '/l', sessionId: 'fixture-session', mcpServers: {},
+            messageQueue: queue, onModeChange: vi.fn(), hookSettingsPath: '/fixture/settings.json',
+        });
+        (session.client as any).rpcHandlerManager = f.session.client.rpcHandlerManager;
+        (session as any).consumeOneTimeFlags = vi.fn();
+        let stopped = false;
+        vi.mocked(claudeRemote).mockImplementation(async (opts: any) => {
+            if (stopped) { handlers.get('switch')!(); return; }
+            runBody(opts, session);
+            await new Promise<void>(resolve => opts.signal.addEventListener('abort', () => resolve()));
+            opts.onSteerSink?.(null);
+            stopped = true;
+        });
+        return { session, queue, abort: () => handlers.get('abort')!(), done: () => claudeRemoteLauncher(session as any), cleanup: () => session.cleanup() };
+    }
+    const queued = (q: MessageQueue2<EnhancedMode>) => ((q as any).queue as Array<{ message: string }>).map(i => i.message);
+
+    it('re-queues a steer that was in flight when the user aborted, exactly once', async () => {
+        const s = setup((opts, session) => {
+            opts.onSteerSink((c: unknown) => void c);
+            session.steer('steered', [], mode);
+            setTimeout(() => void s.abort(), 0);
+        });
+        await s.done();
+        expect(queued(s.queue)).toEqual(['steered']);
+        s.cleanup();
+    });
+
+    it('does not re-queue a steer once the turn produced a result', async () => {
+        const s = setup((opts, session) => {
+            opts.onSteerSink((c: unknown) => void c);
+            session.steer('steered', [], mode);
+            opts.onTurnComplete?.();
+            setTimeout(() => void s.abort(), 0);
+        });
+        await s.done();
+        expect(queued(s.queue)).toEqual([]);
+        s.cleanup();
+    });
+
+    it('keeps a plain queued message on the queue across an abort', async () => {
+        const s = setup((_opts, _session) => {
+            s.queue.push('queued', mode);
+            setTimeout(() => void s.abort(), 0);
+        });
+        await s.done();
+        expect(queued(s.queue)).toEqual(['queued']);
+        s.cleanup();
     });
 });

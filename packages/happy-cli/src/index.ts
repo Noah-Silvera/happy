@@ -22,7 +22,7 @@ import { install } from './daemon/install'
 import { uninstall } from './daemon/uninstall'
 import { ApiClient } from './api/api'
 import { runDoctorCommand, runDoctorDaemon } from './ui/doctor'
-import { listDaemonSessions, stopDaemonSession } from './daemon/controlClient'
+import { listDaemonSessions, stopDaemonSession, resumeDaemonSession } from './daemon/controlClient'
 import { handleAuthCommand } from './commands/auth'
 import { handleConnectCommand } from './commands/connect'
 import { handleSandboxCommand } from './commands/sandbox'
@@ -529,6 +529,23 @@ Conversation history is preserved on the server, but in-flight tool calls are in
         console.log(success ? 'Session stopped' : 'Failed to stop session')
       } catch (error) {
         console.log('No daemon running')
+      }
+      return
+
+    } else if (daemonSubcommand === 'resume-session') {
+      const sessionId = args[2]
+      if (!sessionId) {
+        console.error('Session ID required')
+        process.exit(1)
+      }
+
+      try {
+        const result = await resumeDaemonSession(sessionId)
+        console.log(JSON.stringify(result))
+        if (result?.type !== 'success') process.exit(1)
+      } catch (error) {
+        console.log('No daemon running')
+        process.exit(1)
       }
       return
 

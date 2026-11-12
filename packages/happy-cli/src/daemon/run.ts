@@ -962,6 +962,7 @@ export async function startDaemon(): Promise<void> {
       getChildren: getCurrentChildren,
       stopSession,
       spawnSession,
+      resumeSession: (happySessionId) => resumeSession(happySessionId),
       requestShutdown: () => requestShutdown('happy-cli'),
       onHappySessionWebhook,
       getConnectionStatus: () => ({
