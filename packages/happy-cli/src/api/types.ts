@@ -207,6 +207,7 @@ export const MessageMetaSchema = z.object({
   appendSystemPrompt: z.string().nullable().optional(), // Append to system prompt for this message (null = reset)
   allowedTools: z.array(z.string()).nullable().optional(), // Allowed tools for this message (null = reset)
   disallowedTools: z.array(z.string()).nullable().optional(), // Disallowed tools for this message (null = reset)
+  delivery: z.enum(['queue', 'steer']).optional().catch(undefined), // Phone follow-up while a run is live: steer injects mid-run, queue/unset waits for the turn. Unknown values degrade to unset.
   effort: z.string().nullable().optional() // Effort level for this message (null = reset). happy-app sends this key; without it Zod strips the value before runClaude reads it.
 })
 
@@ -293,6 +294,12 @@ export const MessageContentSchema = z.union([UserMessageSchema, AgentMessageSche
 export type MessageContent = z.infer<typeof MessageContentSchema>
 
 export type Metadata = {
+  /**
+   * Honors meta.delivery from the phone (queue/steer). Deliberately not under
+   * `capabilities`: the app's strict Rig capabilities schema would reject a
+   * partial object and fail parsing of the whole metadata.
+   */
+  queueing?: boolean,
   /**
    * ACP session config option value (normalized for UI metadata consumers).
    */

@@ -43,6 +43,10 @@ export async function claudeRemote(opts: {
     // Callbacks
     onSessionFound: (id: string) => void,
     onThinkingChange?: (thinking: boolean) => void,
+    /** Called when a turn's result arrives, so steers sent so far are known to be seen. */
+    onTurnComplete?: () => void,
+    /** Hands the caller a way to push a user message into the live run; called with null when the run ends. */
+    onSteerSink?: (sink: ((content: MessageParam['content']) => void) | null) => void,
     onMessage: (message: SDKMessage) => void,
     onCompletionEvent?: (message: string) => void,
     onSessionReset?: () => void,
@@ -168,6 +172,10 @@ export async function claudeRemote(opts: {
             role: 'user',
             content: initial.message,
         },
+    });
+
+    opts.onSteerSink?.((content) => {
+        messages.push({ type: 'user', parent_tool_use_id: null, message: { role: 'user', content } });
     });
 
     // Start the loop
@@ -336,6 +344,7 @@ export async function claudeRemote(opts: {
             // Handle result messages
             if (message.type === 'result') {
                 updateThinking(false);
+                opts.onTurnComplete?.();
                 logger.debug('[claudeRemote] Result received');
 
                 // Fire-and-forget: unavailable for API key / Bedrock / Vertex
@@ -395,6 +404,7 @@ export async function claudeRemote(opts: {
             throw e;
         }
     } finally {
+        opts.onSteerSink?.(null);
         updateThinking(false);
     }
 }

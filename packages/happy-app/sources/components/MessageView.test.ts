@@ -61,6 +61,19 @@ afterEach(() => {
 });
 
 describe('user message frame', () => {
+    it.each([
+        ['steer', 'message.steering'],
+        ['queue', 'message.queued'],
+    ] as const)('keeps naming a %s send that no receipt will ever settle (happy-cli)', (delivery, label) => {
+        const renderer = render({ ...base, meta: { delivery } });
+        expect(labels(renderer)).toContain(label);
+    });
+
+    it('stays quiet for a settled delivery that was already tracked by receipts', () => {
+        const renderer = render({ ...base, meta: { queuedWhileBusy: true, delivery: 'queue' } });
+        expect(labels(renderer)).toEqual(['']);
+    });
+
     it.each([undefined, false])('does not flash status or dim an idle/new-chat send (%s)', (queuedWhileBusy) => {
         const message = { ...base, pending: true, meta: { queuedWhileBusy } };
         const renderer = render(message);
@@ -104,6 +117,24 @@ describe('user message frame', () => {
         render({ ...message, pending: false }, renderer);
         expect(labels(renderer)).not.toContain('message.sendsAfterThisTurn');
         expect(renderer.root.findByType('LongPressCopyable')).toBe(bubble);
+    });
+
+    it.each([
+        ['queue', 'message.queued'],
+        ['steer', 'message.steering'],
+    ] as const)('names a busy send’s %s delivery until acceptance', (delivery, label) => {
+        const message = { ...base, pending: true, meta: { queuedWhileBusy: true, delivery } };
+        const renderer = render(message);
+        expect(labels(renderer)).toContain(label);
+        expect(labels(renderer)).not.toContain('message.sendsAfterThisTurn');
+
+        render({ ...message, pending: false }, renderer);
+        expect(labels(renderer)).toEqual(['']);
+    });
+
+    it('keeps an idle send quiet even when it carries a delivery', () => {
+        expect(labels(render({ ...base, pending: true, meta: { queuedWhileBusy: false, delivery: 'queue' } })))
+            .toEqual(['']);
     });
 
     it('puts the other participant’s name above their message', () => {
